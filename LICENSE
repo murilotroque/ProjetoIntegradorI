@@ -1,21 +1,32 @@
-MIT License
+# LICENÇA PROPRIETÁRIA — TODOS OS DIREITOS RESERVADOS
 
-Copyright (c) 2026 Murilo Roque
+Copyright © 2026 Grazielly dos Santos da Costa, João Vitor da Silva Maia,
+Miguel Silva Pereira e Murilo Teixeira Roque Banuis.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Todos os direitos reservados.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Este repositório e todo o seu conteúdo — incluindo código-fonte, arquivos,
+documentação, artigo, dashboards, visualizações, estruturas de dados tratadas,
+processos de ETL, metodologia, organização e concepção do projeto — são de uso
+exclusivo dos autores identificados acima.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Não é concedida qualquer licença, expressa ou implícita, para terceiros usarem,
+copiar, reproduzir, modificar, adaptar, publicar, distribuir, sublicenciar,
+comercializar, disponibilizar ou criar trabalhos derivados a partir deste
+repositório ou de qualquer parte de seu conteúdo. Qualquer uso depende de
+autorização prévia e por escrito de todos os autores.
+
+## Dados de fontes públicas
+
+Os dados brutos e indicadores obtidos de fontes públicas, como MDIC e Banco
+Central do Brasil, não pertencem aos autores deste projeto. Quem desejar
+utilizá-los deve obtê-los diretamente nas fontes oficiais e observar os
+respectivos termos de uso, licenças e regras de atribuição.
+
+Esta licença não autoriza a reutilização do código, dos arquivos, das bases
+tratadas, da organização, da metodologia, das análises, dos dashboards ou de
+outros materiais produzidos neste repositório, mesmo quando os dados de origem
+forem públicos.
+
+Para solicitar autorização de uso, entre em contato com todos os autores.
+
