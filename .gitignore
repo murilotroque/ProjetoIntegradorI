@@ -1,0 +1,25 @@
+# Bases brutas: arquivos originais do MDIC e BCB, não versionados.
+data/raw/*
+!data/raw/README.md
+
+# Saída consolidada legada: excede o limite de tamanho do GitHub.
+data/processed/maquinas.json
+
+# Ambientes e cache do Python.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+env/
+
+# Arquivos locais de configuração e segredos.
+.env
+.env.*
+
+# Arquivos temporários do sistema/editor.
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
