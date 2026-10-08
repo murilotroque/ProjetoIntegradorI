@@ -64,8 +64,20 @@ def ler_comercio(arquivo: Path, tipo: str) -> pd.DataFrame:
 
 
 def salvar(destino: Path, conteudo: dict) -> None:
-    destino.write_text(json.dumps(conteudo, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    print(f"Gerado: {destino.relative_to(RAIZ)}")
+    """Escreve o cabeçalho legível e um registro da série por linha."""
+    serie = conteudo["serie"]
+    cabecalho = {chave: valor for chave, valor in conteudo.items() if chave != "serie"}
+    linhas = ["{"]
+    itens_cabecalho = list(cabecalho.items())
+    for chave, valor in itens_cabecalho:
+        linhas.append(f"  {json.dumps(chave, ensure_ascii=False)}: {json.dumps(valor, ensure_ascii=False)},")
+    linhas.append('  "serie": [')
+    for indice, registro in enumerate(serie):
+        virgula = "," if indice < len(serie) - 1 else ""
+        linhas.append(f"    {json.dumps(registro, ensure_ascii=False, separators=(',', ':'))}{virgula}")
+    linhas.extend(["  ]", "}"])
+    destino.write_text("\n".join(linhas) + "\n", encoding="utf-8")
+    print(f"Gerado: {destino.resolve().relative_to(RAIZ)}")
 
 
 def salvar_commodity(nome: str, produto: str, prefixo: str, dados: pd.DataFrame, periodo: str) -> None:
