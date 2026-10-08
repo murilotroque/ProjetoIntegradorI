@@ -5,7 +5,6 @@
   "unidade": "R$/US$",
   "agregacao": "média mensal das cotações diárias disponíveis",
   "serie": [
-    {"ano":2018,"mes":1,"cotacao_compra":3.2099863636363635,"cotacao_venda":3.2106090909090907},
     {"ano":2018,"mes":2,"cotacao_compra":3.2409055555555555,"cotacao_venda":3.2415000000000003},
     {"ano":2018,"mes":3,"cotacao_compra":3.2786142857142857,"cotacao_venda":3.2792142857142856},
     {"ano":2018,"mes":4,"cotacao_compra":3.4069,"cotacao_venda":3.407495238095238},
@@ -89,6 +88,15 @@
     {"ano":2024,"mes":10,"cotacao_compra":5.623508695652174,"cotacao_venda":5.624108695652174},
     {"ano":2024,"mes":11,"cotacao_compra":5.806457894736842,"cotacao_venda":5.807057894736842},
     {"ano":2024,"mes":12,"cotacao_compra":6.096395238095239,"cotacao_venda":6.097028571428571},
-    {"ano":2025,"mes":1,"cotacao_compra":6.181850000000001,"cotacao_venda":6.182449999999999}
+    {"ano":2025,"mes":1,"cotacao_compra":6.021172727272727,"cotacao_venda":6.021772727272727},
+    {"ano":2025,"mes":2,"cotacao_compra":5.765045,"cotacao_venda":5.765645},
+    {"ano":2025,"mes":3,"cotacao_compra":5.746215789473684,"cotacao_venda":5.74681052631579},
+    {"ano":2025,"mes":4,"cotacao_compra":5.778528571428571,"cotacao_venda":5.779119047619048},
+    {"ano":2025,"mes":5,"cotacao_compra":5.666780952380952,"cotacao_venda":5.6673857142857145},
+    {"ano":2025,"mes":6,"cotacao_compra":5.546455,"cotacao_venda":5.547055},
+    {"ano":2025,"mes":7,"cotacao_compra":5.52788695652174,"cotacao_venda":5.528491304347826},
+    {"ano":2025,"mes":8,"cotacao_compra":5.446323809523809,"cotacao_venda":5.44692380952381},
+    {"ano":2025,"mes":9,"cotacao_compra":5.366809090909091,"cotacao_venda":5.367409090909091},
+    {"ano":2025,"mes":10,"cotacao_compra":5.3202,"cotacao_venda":5.3208}
   ]
 }
