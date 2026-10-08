@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Selic, Câmbio e Comércio Exterior</title>
+  <meta name="description" content="Dashboard interativo: Taxa Selic x dólar x exportações e importações brasileiras (2018–2025).">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="aura" aria-hidden="true"></div>
+
+  <header class="topo">
+    <div>
+      <p class="eyebrow">FATEC Baixada Santista · Projeto Integrador</p>
+      <h1>Selic <span>×</span> Câmbio <span>×</span> Comércio Exterior</h1>
+      <p class="sub">Minério de ferro, soja, petróleo e máquinas, 2018–2025. Valores FOB em US$ (MDIC) cruzados com a Selic e o dólar (BCB).</p>
+    </div>
+  </header>
+
+  <section class="controles" aria-label="Filtros">
+    <div class="grupo">
+      <span class="rotulo">Produtos</span>
+      <div id="chips" class="chips" role="group" aria-label="Produtos"></div>
+    </div>
+    <div class="grupo">
+      <span class="rotulo">Granularidade</span>
+      <div id="gran" class="seg" role="radiogroup" aria-label="Granularidade">
+        <button role="radio" data-v="mes">Mensal</button>
+        <button role="radio" data-v="tri">Trimestral</button>
+        <button role="radio" data-v="ano">Anual</button>
+      </div>
+    </div>
+    <div class="grupo">
+      <span class="rotulo">Indicador</span>
+      <div id="ind" class="seg" role="radiogroup" aria-label="Indicador macroeconômico">
+        <button role="radio" data-v="selic">Selic</button>
+        <button role="radio" data-v="dolar">Dólar</button>
+      </div>
+    </div>
+    <div class="grupo">
+      <span class="rotulo">Período</span>
+      <div class="periodo">
+        <select id="de" aria-label="Ano inicial"></select>
+        <span>até</span>
+        <select id="ate" aria-label="Ano final"></select>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <section class="kpis" id="kpis" aria-live="polite"></section>
+
+    <section class="painel grande">
+      <div class="painel-topo">
+        <h2 id="tituloGrafico">Exportações, importações e saldo</h2>
+        <div class="chips camadas" id="camadas" role="group" aria-label="Séries exibidas"></div>
+      </div>
+      <div class="grafico" id="grafico"></div>
+      <p class="nota" id="notaLacunas"></p>
+    </section>
+
+    <div class="duas">
+      <section class="painel">
+        <div class="painel-topo"><h2>Saldo por produto no período</h2></div>
+        <div id="ranking" class="ranking"></div>
+      </section>
+      <section class="painel">
+        <div class="painel-topo"><h2>Associação com o indicador</h2></div>
+        <div id="correl" class="correl"></div>
+      </section>
+    </div>
+
+    <div id="analises"></div>
+  </main>
+
+  <footer class="rodape">
+    <p id="fontes"></p>
+    <p>Análise exploratória e descritiva: correlação não implica causalidade.</p>
+  </footer>
+
+  <div id="dica" class="dica" role="status" hidden></div>
+
+  <script src="js/dados.js"></script>
+  <script src="js/app.js"></script>
+  <script src="js/analises.js"></script>
+</body>
+</html>
