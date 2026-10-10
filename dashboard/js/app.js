@@ -1,6 +1,11 @@
-
+/* Dashboard Selic x Câmbio x Comércio Exterior
+ * Lê window.DADOS (dashboard/dados.js, gerado por src/gerar_dados_dashboard.py).
+ * Para adicionar uma métrica nova: veja `agregar()` (cálculo) e `renderKpis()` (cartões).
+ */
 (() => {
   "use strict";
+
+  /* ---------- Configuração (fácil de editar) ---------- */
   const CORES = {
     minerio_de_ferro: "#8b7bff",
     soja: "#38bdf8",
@@ -31,6 +36,7 @@
     camadas: { exp: true, imp: true, saldo: false, ind: true }, // o que aparece no gráfico principal
   };
 
+  /* ---------- Utilidades ---------- */
   const $ = (s) => document.querySelector(s);
   const nf = (v, d = 0) => v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
   function usd(v, sinal = false) {
@@ -54,7 +60,7 @@
     return e;
   };
 
-  
+  /* ---------- Agregação ---------- */
   function chavePeriodo(mesKey, gran) {
     const [a, m] = mesKey.split("-");
     if (gran === "mes") return mesKey;
@@ -97,7 +103,7 @@
     return { rows, faltaInd };
   }
 
-
+  /* ---------- Controles ---------- */
   function montaControles() {
     const chips = $("#chips");
     PRODUTOS.forEach((p) => {
@@ -127,7 +133,7 @@
     ate.onchange = () => { estado.ate = +ate.value; if (estado.de > estado.ate) { estado.de = estado.ate; de.value = estado.de; } render(); };
   }
 
-
+  /* ---------- KPIs ---------- */
   const kpiRefs = {};
   function animaNumero(chave, alvo, fmt) {
     const ref = kpiRefs[chave];
@@ -170,7 +176,7 @@
     });
   }
 
-
+  /* ---------- Gráfico principal ---------- */
   const tick = (max, n = 5) => {
     const bruto = max / n, pot = Math.pow(10, Math.floor(Math.log10(bruto || 1)));
     const f = bruto / pot, passo = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10) * pot;
@@ -303,7 +309,7 @@
       : "";
   }
 
-
+  /* ---------- Camadas do gráfico principal (também servem de legenda) ---------- */
   function renderCamadas() {
     const box = $("#camadas");
     box.innerHTML = "";
@@ -320,7 +326,7 @@
     });
   }
 
-
+  /* ---------- Ranking por produto ---------- */
   function renderRanking() {
     const dados = PRODUTOS.map((p) => {
       const { rows } = agregar(new Set([p]));
@@ -345,7 +351,7 @@
     });
   }
 
-
+  /* ---------- Correlação ---------- */
   function pearson(xs, ys) {
     const n = xs.length;
     if (n < 4) return null;
@@ -355,9 +361,11 @@
     return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
   }
   const leitura = (r) => {
-    if (r == null) return "dados insuficientes";
-    const a = Math.abs(r), forca = a < 0.3 ? "fraca" : a < 0.6 ? "moderada" : "forte";
-    return `${forca}, ${r >= 0 ? "positiva" : "negativa"}`;
+    if (r == null) return "dados insuficientes para dizer";
+    const a = Math.abs(r);
+    if (a < 0.15) return "quase nenhuma relação";
+    const f = a < 0.3 ? "fraca" : a < 0.5 ? "média" : "forte";
+    return `relação ${f}: ${r > 0 ? "tendem a subir juntos" : "quando um sobe, o outro tende a cair"}`;
   };
 
   function renderCorrel(rows) {
@@ -365,17 +373,18 @@
     const box = $("#correl");
     const par = (titulo, campo) => {
       const r = pearson(validos.map((v) => v.ind), validos.map((v) => v[campo]));
-      return `<div class="cr"><span class="tit">${titulo}</span><span class="val">${r == null ? "—" : nf(r, 2)}</span>
+      return `<div class="cr"><span class="tit">${titulo}</span>
         <div class="escala"><div class="pino" style="left:calc(${r == null ? 50 : ((r + 1) / 2) * 100}% - 2px)"></div></div>
-        <span class="leitura">Associação ${leitura(r)}</span></div>`;
+        <div class="eixo"><span>um sobe, o outro cai</span><span>sobem juntos</span></div>
+        <span class="leitura"><b>${leitura(r)}</b></span></div>`;
     };
     box.innerHTML = `
-      ${par(`${IND[estado.ind].curto} × Exportações`, "exp")}
-      ${par(`${IND[estado.ind].curto} × Importações`, "imp")}
-      <p class="aviso">Pearson sobre ${validos.length} períodos ${GRANS[estado.gran].plural}, no recorte atual. Séries com tendência (inflação, safra, pandemia) podem gerar associações espúrias: isto é descrição, não prova de causalidade.</p>`;
+      ${par(`${IND[estado.ind].curto} e exportações`, "exp")}
+      ${par(`${IND[estado.ind].curto} e importações`, "imp")}
+      <p class="aviso">Andar junto não prova que uma coisa causa a outra: pandemia, safras e preços também mexeram nesses anos.</p>`;
   }
 
-
+  /* ---------- Render geral ---------- */
   function render() {
     const { rows, faltaInd } = agregar();
     $("#tituloGrafico").textContent = `Exportações, importações e saldo · ${GRANS[estado.gran].rotulo}`;

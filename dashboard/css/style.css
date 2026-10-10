@@ -150,7 +150,7 @@ h2 { font-size: 15px; font-weight: 650; letter-spacing: .01em; }
   .linha.desenha { stroke-dashoffset: 0; }
 }
 
-
+/* ===== Análises estatísticas ===== */
 .secao { font-size: 20px; margin: 34px 0 12px; letter-spacing: -.01em; }
 .secao small { display: block; color: var(--suave); font-size: 13px; font-weight: 400; margin-top: 3px; max-width: 80ch; }
 .mini { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 22px; margin: 4px 0 12px; font-size: 13px; color: var(--suave); }
@@ -164,3 +164,26 @@ input[type="range"] { accent-color: #8b7bff; width: 160px; vertical-align: middl
 .dois-graf { margin-top: 4px; }
 .painel.grande { margin-top: 0; }
 .chips.camadas { gap: 6px; }
+
+/* ===== Versão simples das análises ===== */
+.manchete { font-size: 16px; line-height: 1.4; margin: 6px 0 12px; }
+.manchete b { color: var(--ind); font-weight: 650; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-top: 12px; }
+.tile { background: var(--painel); border: 1px solid var(--borda); border-radius: 12px; padding: 10px 12px; }
+.tile small { display: block; color: var(--suave); font-size: 11px; }
+.tile strong { font-size: 16px; font-variant-numeric: tabular-nums; }
+.tile em { font-style: normal; font-size: 11px; color: var(--suave); margin-left: 4px; }
+.gb { margin: 10px 0 14px; }
+.gb-topo { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; }
+.gb-trilho { height: 22px; background: #ffffff0d; border-radius: 8px; overflow: hidden; margin: 5px 0 3px; }
+.gb-barra { height: 100%; border-radius: 8px; transition: width .7s cubic-bezier(.2,.8,.2,1); }
+.gb small { color: var(--suave); font-size: 11px; }
+.selo { padding: 8px 12px; border-radius: 10px; font-size: 13px; margin: 6px 0 10px; }
+.selo.ok { background: #8b7bff22; border: 1px solid #8b7bff66; }
+.selo.talvez { background: #fcd34d14; border: 1px solid #fcd34d55; }
+.avancado { margin-top: 12px; font-size: 13px; color: var(--suave); }
+.avancado summary { cursor: pointer; width: fit-content; }
+.avancado .mini { margin-top: 10px; }
+.cr .eixo { grid-column: 1 / -1; display: flex; justify-content: space-between; font-size: 11px; color: var(--suave); }
+.cr .leitura b { color: var(--texto); font-weight: 600; font-size: 13px; }
+.legenda i.barra { outline-offset: 0; }

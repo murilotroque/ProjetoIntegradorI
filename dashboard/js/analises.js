@@ -1,19 +1,24 @@
-
+/* Análises do dashboard, em linguagem simples (rodam sobre as séries mensais carregadas por app.js).
+ *  1) "Se eu olhasse só alguns meses, erraria muito?"  -> amostra aleatória de meses x média real.
+ *  2) "Selic alta x baixa: muda alguma coisa?"        -> compara meses de indicador alto e baixo.
+ *  3) "A commodity segue o cenário da compra ou da saída?" -> relação com o indicador de N meses antes.
+ * Por baixo continuam sendo cálculos estatísticos (amostragem sem reposição, bootstrap/permutação,
+ * correlação com defasagem), mas a tela só mostra o resultado em palavras.
+ * Os sorteios usam semente fixa: o mesmo recorte sempre dá o mesmo resultado.
+ */
 (() => {
   "use strict";
   const { estado, agregar, usd, nf, el, sv, CORES, IND, D, PRODUTOS } = window.DASH;
   const raiz = document.getElementById("analises");
 
-  const st = { metrica: "exp", n: 12, seed: 7, prod: "soja", fluxo: "exp", medida: "valor", dessaz: true, tend: true, lag: null };
-  const NOME_METRICA = { exp: "Exportações", imp: "Importações", saldo: "Saldo" };
+  const st = { metrica: "exp", n: 12, seed: 7, prod: "soja", fluxo: "exp", medida: "valor", dessaz: true, tend: true };
+  const NOME_METRICA = { exp: "as exportações", imp: "as importações", saldo: "o saldo" };
   const MAX_LAG = 12;
 
+  /* ---------- Cálculo (fica escondido da tela) ---------- */
   const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
-  const sd = (a) => { const m = mean(a); return Math.sqrt(a.reduce((s, v) => s + (v - m) ** 2, 0) / (a.length - 1)); };
   const sorted = (a) => [...a].sort((x, y) => x - y);
   const quant = (s, q) => s[Math.min(s.length - 1, Math.max(0, Math.round(q * (s.length - 1))))];
-  const T975 = [0, 12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262, 2.228, 2.201, 2.179, 2.16, 2.145, 2.131, 2.12, 2.11, 2.101, 2.093, 2.086, 2.08, 2.074, 2.069, 2.064, 2.06, 2.056, 2.052, 2.048, 2.045, 2.042];
-  const tcrit = (df) => (df <= 30 ? T975[df] : df <= 40 ? 2.021 : df <= 60 ? 2.0 : df <= 120 ? 1.98 : 1.96);
   function pearson(xs, ys) {
     const n = xs.length;
     if (n < 12) return null;
@@ -26,9 +31,9 @@
     let a = seed >>> 0;
     return () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
-  function amostra(arr, n, rnd) { // sem reposição
-    const a = arr.slice();
-    for (let i = 0; i < n; i++) { const j = i + Math.floor(rnd() * (a.length - i)); [a[i], a[j]] = [a[j], a[i]]; }
+  function sorteio(len, n, rnd) { // n posições distintas de 0..len-1
+    const a = Array.from({ length: len }, (_, i) => i);
+    for (let i = 0; i < n; i++) { const j = i + Math.floor(rnd() * (len - i)); [a[i], a[j]] = [a[j], a[i]]; }
     return a.slice(0, n);
   }
   function ticks(min, max, n = 5) {
@@ -39,15 +44,16 @@
   }
   const curto = (v) => usd(v).replace("US$ ", "");
   const shift = (k, d) => { const [a, m] = k.split("-").map(Number); const i = a * 12 + (m - 1) + d; return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`; };
-  const mesRot = (k) => `${k.slice(5)}/${k.slice(2, 4)}`;
+  const meses = (n) => `${n} ${n === 1 ? "mês" : "meses"}`;
+  const forca = (r) => { const a = Math.abs(r); return a < 0.15 ? "quase nenhuma" : a < 0.3 ? "fraca" : a < 0.5 ? "média" : "forte"; };
 
-
+  /* ---------- Esqueleto ---------- */
   raiz.innerHTML = `
-    <h2 class="secao">Amostras aleatórias e comparação
-      <small>Séries mensais do recorte atual (produtos e período escolhidos lá em cima). Cada mês é uma observação.</small></h2>
+    <h2 class="secao">Olhando os números de outro jeito
+      <small>Três perguntas simples, respondidas com os meses do recorte escolhido lá em cima.</small></h2>
     <div class="mini">
-      <span class="rotulo">Métrica</span>
-      <div class="seg" id="s-metrica" role="radiogroup" aria-label="Métrica analisada">
+      <span class="rotulo">Olhar:</span>
+      <div class="seg" id="s-metrica" role="radiogroup" aria-label="O que analisar">
         <button role="radio" data-v="exp">Exportações</button>
         <button role="radio" data-v="imp">Importações</button>
         <button role="radio" data-v="saldo">Saldo</button>
@@ -55,178 +61,142 @@
     </div>
     <div class="duas">
       <section class="painel">
-        <div class="painel-topo"><h2>Quanto uma amostra aleatória erra a média?</h2></div>
+        <div class="painel-topo"><h2>Se eu olhasse só alguns meses, erraria muito?</h2></div>
+        <p class="sub-graf">Cada barra é um mês. As coloridas foram sorteadas.</p>
         <div class="mini">
-          <label>Tamanho da amostra: <b id="n-val"></b> meses
-            <input type="range" id="n-in" min="5" max="48" step="1"></label>
-          <button id="sorteia">Sortear outra amostra</button>
+          <label>Meses sorteados: <b id="n-val"></b>
+            <input type="range" id="n-in" min="5" max="48" step="1" aria-label="Quantidade de meses sorteados"></label>
+          <button id="sorteia">Sortear de novo</button>
         </div>
         <div class="grafico" id="s1"></div>
-        <div class="txt" id="s1-txt"></div>
+        <div class="legenda" id="s1-leg"></div>
+        <div class="tiles" id="s1-tiles"></div>
+        <p class="manchete" id="s1-txt"></p>
       </section>
       <section class="painel">
-        <div class="painel-topo"><h2 id="s2-tit">Meses de indicador alto × baixo</h2></div>
-        <div class="grafico" id="s2"></div>
-        <div class="txt" id="s2-txt"></div>
+        <div class="painel-topo"><h2 id="s2-tit">Indicador alto × baixo: muda alguma coisa?</h2></div>
+        <div id="s2"></div>
       </section>
     </div>
 
-    <h2 class="secao">Compra × saída: qual cenário a commodity acompanha?
-      <small>Contratos costumam ser fechados meses antes do embarque. Compare o fluxo do mês com o indicador do mesmo mês (defasagem 0) e de até ${MAX_LAG} meses antes.</small></h2>
+    <h2 class="secao">A commodity segue o cenário da compra ou o da saída?
+      <small>Contratos costumam ser fechados meses antes do embarque. Cada barra compara o embarque com o indicador de alguns meses antes.</small></h2>
     <section class="painel grande">
       <div class="mini">
         <label>Produto <select id="a-prod"></select></label>
         <div class="seg" id="a-fluxo" role="radiogroup" aria-label="Fluxo">
           <button role="radio" data-v="exp">Exportação</button><button role="radio" data-v="imp">Importação</button>
         </div>
-        <div class="seg" id="a-medida" role="radiogroup" aria-label="Medida">
-          <button role="radio" data-v="valor">Valor (US$)</button><button role="radio" data-v="kg">Volume (kg)</button>
+      </div>
+      <p class="manchete" id="a-manchete"></p>
+      <div class="grafico" id="a-barras"></div>
+      <div class="legenda" id="a-leg"></div>
+      <p class="nota" id="a-txt"></p>
+      <details class="avancado">
+        <summary>Ajustes (opcional)</summary>
+        <div class="mini">
+          <div class="seg" id="a-medida" role="radiogroup" aria-label="Medida">
+            <button role="radio" data-v="valor">Valor (US$)</button><button role="radio" data-v="kg">Quantidade (kg)</button>
+          </div>
+          <label class="chk"><input type="checkbox" id="a-dessaz"> Ignorar o efeito da safra</label>
+          <label class="chk"><input type="checkbox" id="a-tend"> Ignorar o crescimento de longo prazo</label>
         </div>
-        <label class="chk"><input type="checkbox" id="a-dessaz"> Remover sazonalidade</label>
-        <label class="chk"><input type="checkbox" id="a-tend"> Remover tendência</label>
-      </div>
-      <div class="mini">
-        <label>Defasagem: <b id="a-lag-val"></b>
-          <input type="range" id="a-lag" min="0" max="${MAX_LAG}" step="1"></label>
-        <button id="a-auto">Usar a de maior associação</button>
-      </div>
-      <div class="duas dois-graf">
-        <div><p class="sub-graf">Correlação por defasagem (clique numa barra)</p><div class="grafico" id="a-barras"></div></div>
-        <div><p class="sub-graf" id="a-linha-tit"></p><div class="grafico" id="a-linha"></div></div>
-      </div>
-      <div class="txt" id="a-txt"></div>
+        <p class="nota">Sem esses descontos, a relação pode aparecer só porque tudo cresceu ou porque a safra tem época certa, e não por causa do indicador.</p>
+      </details>
     </section>`;
 
   const $ = (s) => raiz.querySelector(s);
-
-
   const mensal = (produtos = estado.sel) => agregar(produtos, "mes").rows;
 
-  /* ---------- 1) Distribuição amostral ---------- */
+  /* ---------- 1) Poucos meses erram muito? ---------- */
   function renderAmostragem() {
-    const pop = mensal().map((r) => r[st.metrica]);
-    const N = pop.length;
+    const rows = mensal(), pop = rows.map((r) => r[st.metrica]), N = pop.length;
     const nMax = Math.max(5, Math.floor(N / 2));
     st.n = Math.min(Math.max(5, st.n), nMax);
     $("#n-in").max = nMax; $("#n-in").value = st.n; $("#n-val").textContent = st.n;
     const n = st.n, mu = mean(pop);
-    const sigma = Math.sqrt(pop.reduce((s, v) => s + (v - mu) ** 2, 0) / N);
 
-    // 2000 amostras (semente fixa: o histograma só muda com o recorte ou o n)
-    const rnd = rng(12345), B = 2000, medias = [];
-    let cobre = 0;
-    for (let b = 0; b < B; b++) {
-      const a = amostra(pop, n, rnd), m = mean(a);
-      medias.push(m);
-      if (Math.abs(m - mu) <= (tcrit(n - 1) * sd(a)) / Math.sqrt(n)) cobre++;
-    }
-    // amostra "atual" (muda com a semente)
-    const a = amostra(pop, n, rng(st.seed * 7919 + 13));
-    const xb = mean(a), s = sd(a), h = (tcrit(n - 1) * s) / Math.sqrt(n);
-    const contem = Math.abs(xb - mu) <= h;
+    // 2000 sorteios: o "erro típico" de olhar só n meses
+    const rnd = rng(12345), erros = [];
+    for (let b = 0; b < 2000; b++) erros.push(Math.abs(mean(sorteio(N, n, rnd).map((i) => pop[i])) - mu));
+    const erro95 = quant(sorted(erros), 0.95);
 
-    const ord = sorted(medias), lo95 = quant(ord, 0.025), hi95 = quant(ord, 0.975);
+    const idx = new Set(sorteio(N, n, rng(st.seed * 7919 + 13)));
+    const xb = mean([...idx].map((i) => pop[i])), dif = xb - mu;
+
     const host = $("#s1");
     host.innerHTML = "";
-    const W = Math.max(300, host.clientWidth || 600), H = 270;
-    const m = { l: 12, r: 12, t: 22, b: 62 };
+    const W = Math.max(280, host.clientWidth || 560), H = 230, m = { l: 8, r: 8, t: 10, b: 24 };
     const iw = W - m.l - m.r, ih = H - m.t - m.b;
-    const dmin = Math.min(ord[0], xb - h, mu), dmax = Math.max(ord[ord.length - 1], xb + h, mu);
-    const pad = (dmax - dmin) * 0.04;
-    const x = (v) => m.l + ((v - (dmin - pad)) / (dmax - dmin + 2 * pad)) * iw;
-    const bins = 26, largura = (dmax - dmin) / bins || 1, cont = new Array(bins).fill(0);
-    medias.forEach((v) => { cont[Math.min(bins - 1, Math.floor((v - dmin) / largura))]++; });
-    const cmax = Math.max(...cont);
-    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Histograma das médias de 2000 amostras aleatórias" });
-    const y0 = m.t + ih;
-    svg.append(sv("line", { class: "zero", x1: m.l, x2: W - m.r, y1: y0, y2: y0 }));
-    cont.forEach((c, i) => {
-      const v0 = dmin + i * largura, v1 = v0 + largura, dentro = v1 >= lo95 && v0 <= hi95;
-      const alt = (c / cmax) * ih;
-      const r = sv("rect", { x: x(v0) + 0.5, y: y0 - alt, width: Math.max(1, x(v1) - x(v0) - 1), height: alt, rx: 2, fill: "var(--exp)", opacity: dentro ? 0.85 : 0.3 });
-      const t = sv("title"); t.textContent = `${curto(v0)} a ${curto(v1)}: ${c} amostras`; r.append(t);
-      svg.append(r);
+    const vmin = Math.min(0, ...pop), vmax = Math.max(0, ...pop);
+    const y = (v) => m.t + ih - ((v - vmin) / (vmax - vmin || 1)) * ih;
+    const bw = iw / N;
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Barras mensais com os meses sorteados em destaque" });
+    rows.forEach((r, i) => {
+      const v = pop[i], top = Math.min(y(v), y(0)), alt = Math.max(1, Math.abs(y(v) - y(0)));
+      const on = idx.has(i);
+      const b = sv("rect", { x: m.l + i * bw + bw * 0.1, y: top, width: Math.max(1, bw * 0.8), height: alt, rx: 1.5, fill: on ? "var(--exp)" : "#ffffff", opacity: on ? 1 : 0.13 });
+      const t = sv("title"); t.textContent = `${r.k.slice(5)}/${r.k.slice(0, 4)}: ${usd(v)}${on ? " (sorteado)" : ""}`; b.append(t);
+      svg.append(b);
+      if (r.k.endsWith("-01")) { const t2 = sv("text", { x: m.l + i * bw, y: H - 7 }); t2.textContent = r.k.slice(0, 4); svg.append(t2); }
     });
-    ticks(dmin, dmax, peqW(W) ? 3 : 5).forEach((v) => {
-      const t = sv("text", { x: x(v), y: y0 + 15, "text-anchor": "middle" }); t.textContent = curto(v); svg.append(t);
-    });
-    // μ
-    svg.append(sv("line", { x1: x(mu), x2: x(mu), y1: m.t - 6, y2: y0, stroke: "#fff", "stroke-dasharray": "4 4", opacity: 0.8 }));
-    const tm = sv("text", { x: x(mu), y: m.t - 9, "text-anchor": "middle" }); tm.style.fill = "#fff"; tm.textContent = "μ (todos os meses)"; svg.append(tm);
-    // IC da amostra atual
-    const yi = y0 + 38, cor = contem ? "var(--imp)" : "var(--neg)";
-    svg.append(sv("line", { x1: x(xb - h), x2: x(xb + h), y1: yi, y2: yi, stroke: cor, "stroke-width": 3, "stroke-linecap": "round" }));
-    [xb - h, xb + h].forEach((v) => svg.append(sv("line", { x1: x(v), x2: x(v), y1: yi - 6, y2: yi + 6, stroke: cor, "stroke-width": 2 })));
-    svg.append(sv("circle", { cx: x(xb), cy: yi, r: 5, fill: cor }));
-    const tl = sv("text", { x: Math.min(W - m.r, Math.max(m.l, x(xb))), y: yi + 20, "text-anchor": x(xb) < 90 ? "start" : x(xb) > W - 90 ? "end" : "middle" });
-    tl.style.fill = cor; tl.textContent = `esta amostra: x̄ e IC 95%`; svg.append(tl);
+    svg.append(sv("line", { class: "zero", x1: m.l, x2: W - m.r, y1: y(0), y2: y(0) }));
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(mu), y2: y(mu), stroke: "#fff", "stroke-width": 1.6, "stroke-dasharray": "5 4" }));
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(xb), y2: y(xb), stroke: "var(--ind)", "stroke-width": 2.4 }));
     host.append(svg);
+    $("#s1-leg").innerHTML = `
+      <span><i class="barra" style="--c:var(--exp)"></i>mês sorteado</span>
+      <span><i class="trac" style="--c:#fff"></i>média de todos os meses</span>
+      <span><i style="--c:var(--ind)"></i>média dos sorteados</span>`;
 
-    const seTeo = (sigma / Math.sqrt(n)) * Math.sqrt((N - n) / (N - 1));
-    $("#s1-txt").innerHTML = `
-      <p><b>População:</b> ${N} meses · μ = <b>${usd(mu)}</b> · σ = ${usd(sigma)}</p>
-      <p><b>Amostra #${st.seed}</b> (n = ${n}): x̄ = <b>${usd(xb)}</b> · IC 95% [${usd(xb - h)} ; ${usd(xb + h)}] — <b style="color:${cor}">${contem ? "contém" : "NÃO contém"}</b> μ</p>
-      <p>Em ${B} amostras sorteadas, <b>${nf((cobre / B) * 100, 1)}%</b> dos IC 95% contêm μ (esperado ≈ 95%). As barras claras do histograma ficam dentro do intervalo central de 95% das médias amostrais (${curto(lo95)} a ${curto(hi95)}).</p>
-      <p>Erro-padrão simulado: ${usd(sd(medias))} · teórico (σ/√n com correção de população finita): ${usd(seTeo)}. Aumente n e veja o histograma afinar.</p>`;
+    const pct = Math.abs(mu) > 0 && mu > 0 ? ` (${nf((erro95 / mu) * 100, 0)}% da média)` : "";
+    const difPct = mu > 0 ? ` (${nf((Math.abs(dif) / mu) * 100, 1)}%)` : "";
+    $("#s1-tiles").innerHTML = `
+      <div class="tile"><small>Média real (${N} meses)</small><strong>${usd(mu)}</strong></div>
+      <div class="tile"><small>Média dos ${n} sorteados</small><strong style="color:var(--ind)">${usd(xb)}</strong></div>
+      <div class="tile"><small>Diferença</small><strong>${usd(dif, true)}</strong><em>${difPct.replace(/[()]/g, "")}</em></div>`;
+    $("#s1-txt").innerHTML = `Sorteando <b>${n} meses</b>, a média quase sempre fica perto da real: em 95 de 100 sorteios o erro é menor que <b>${usd(erro95)}</b>${pct}. ${n < nMax ? "Quanto mais meses, menor o erro." : ""}`;
   }
-  const peqW = (W) => W < 520;
 
-  /* ---------- 2) Comparação entre regimes ---------- */
+  /* ---------- 2) Indicador alto x baixo ---------- */
   function renderRegimes() {
     const rows = mensal().filter((r) => r.ind != null);
-    const nomeInd = IND[estado.ind].curto;
-    $("#s2-tit").textContent = `Meses de ${nomeInd} alta × baixa: ${NOME_METRICA[st.metrica].toLowerCase()}`;
-    const host = $("#s2"), txt = $("#s2-txt");
-    host.innerHTML = "";
-    const med = quant(sorted(rows.map((r) => r.ind)), 0.5);
+    const info = IND[estado.ind], nomeInd = info.curto;
+    $("#s2-tit").textContent = `${nomeInd} alta × baixa: muda alguma coisa?`;
+    const host = $("#s2");
+    const ordenado = sorted(rows.map((r) => r.ind)), med = quant(ordenado, 0.5);
     const baixa = rows.filter((r) => r.ind <= med).map((r) => r[st.metrica]);
     const alta = rows.filter((r) => r.ind > med).map((r) => r[st.metrica]);
-    if (baixa.length < 6 || alta.length < 6) { txt.innerHTML = `<p class="aviso">Poucos meses com dado de ${nomeInd} neste período para comparar (alta: ${alta.length}, baixa: ${baixa.length}). Amplie o período.</p>`; return; }
+    if (baixa.length < 6 || alta.length < 6) { host.innerHTML = `<p class="nota">Poucos meses com dado de ${nomeInd} neste período para comparar. Amplie o período.</p>`; return; }
 
-    const rnd = rng(2024), B = 2000, P = 5000;
-    const boot = (arr) => { let s = 0; for (let i = 0; i < arr.length; i++) s += arr[Math.floor(rnd() * arr.length)]; return s / arr.length; };
-    const ic = (arr) => { const ms = []; for (let b = 0; b < B; b++) ms.push(boot(arr)); const o = sorted(ms); return [quant(o, 0.025), quant(o, 0.975)]; };
-    const icB = ic(baixa), icA = ic(alta);
-    const difs = []; for (let b = 0; b < B; b++) difs.push(boot(alta) - boot(baixa));
-    const od = sorted(difs), icD = [quant(od, 0.025), quant(od, 0.975)];
+    const rnd = rng(2024), P = 5000, todos = baixa.concat(alta), nA = alta.length;
     const obs = mean(alta) - mean(baixa);
-    const todos = baixa.concat(alta), nA = alta.length;
     let extremos = 0;
     for (let p = 0; p < P; p++) {
       for (let i = todos.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [todos[i], todos[j]] = [todos[j], todos[i]]; }
-      const d = mean(todos.slice(0, nA)) - mean(todos.slice(nA));
-      if (Math.abs(d) >= Math.abs(obs)) extremos++;
+      if (Math.abs(mean(todos.slice(0, nA)) - mean(todos.slice(nA))) >= Math.abs(obs)) extremos++;
     }
-    const pval = (extremos + 1) / (P + 1);
+    const consistente = (extremos + 1) / (P + 1) < 0.05;
 
-    const W = Math.max(300, host.clientWidth || 600), H = 200;
-    const m = { l: 12, r: 12, t: 8, b: 28 };
-    const iw = W - m.l - m.r;
-    const vmin = Math.min(...todos), vmax = Math.max(...todos), pad = (vmax - vmin) * 0.05 || 1;
-    const x = (v) => m.l + ((v - (vmin - pad)) / (vmax - vmin + 2 * pad)) * iw;
-    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Meses de indicador baixo e alto com média e intervalo de confiança" });
-    ticks(vmin, vmax, peqW(W) ? 3 : 5).forEach((v) => {
-      svg.append(sv("line", { class: "grade", x1: x(v), x2: x(v), y1: m.t, y2: H - m.b }));
-      const t = sv("text", { x: x(v), y: H - 10, "text-anchor": "middle" }); t.textContent = curto(v); svg.append(t);
-    });
-    const jr = rng(99);
-    const linhaGrupo = (arr, ic95, cy, cor, rotulo) => {
-      const lab = sv("text", { x: m.l, y: cy - 38 }); lab.style.fill = cor; lab.textContent = rotulo; svg.append(lab);
-      arr.forEach((v) => svg.append(sv("circle", { cx: x(v), cy: cy + (jr() - 0.5) * 34, r: 3, fill: cor, opacity: 0.4 })));
-      svg.append(sv("line", { x1: x(ic95[0]), x2: x(ic95[1]), y1: cy, y2: cy, stroke: "#fff", "stroke-width": 4, "stroke-linecap": "round" }));
-      const mx = x(mean(arr));
-      svg.append(sv("path", { d: `M${mx} ${cy - 8} l7 8 l-7 8 l-7 -8z`, fill: cor, stroke: "#fff", "stroke-width": 1.5 }));
-    };
-    linhaGrupo(baixa, icB, 62, "var(--imp)", `${nomeInd} baixa (≤ ${IND[estado.ind].fmt(med)}) · ${baixa.length} meses`);
-    linhaGrupo(alta, icA, 148, "var(--exp)", `${nomeInd} alta (> ${IND[estado.ind].fmt(med)}) · ${alta.length} meses`);
-    host.append(svg);
+    const mA = mean(alta), mB = mean(baixa), max = Math.max(Math.abs(mA), Math.abs(mB)) || 1;
+    const linha = (rot, v, qtd, cor) => `
+      <div class="gb">
+        <div class="gb-topo"><span>${rot}</span><b>${usd(v)}</b></div>
+        <div class="gb-trilho"><div class="gb-barra" style="width:${(Math.abs(v) / max) * 100}%;background:${v < 0 ? "var(--neg)" : cor}"></div></div>
+        <small>média mensal de ${qtd} meses</small>
+      </div>`;
+    let manchete;
+    if (mB > 0 && mA > 0 && st.metrica !== "saldo") {
+      const p = ((mA - mB) / mB) * 100;
+      manchete = `Nos meses de ${nomeInd} alta, ${NOME_METRICA[st.metrica]} foram <b>${nf(Math.abs(p), 0)}% ${p >= 0 ? "maiores" : "menores"}</b>.`;
+    } else manchete = `Nos meses de ${nomeInd} alta, ${NOME_METRICA[st.metrica]} ficaram <b>${usd(Math.abs(obs))} ${obs >= 0 ? "acima" : "abaixo"}</b> da média dos meses de ${nomeInd} baixa.`;
 
-    const sig = pval < 0.05;
-    txt.innerHTML = `
-      <p>Losango = média; barra branca = IC 95% por bootstrap (${B} reamostragens); pontos = cada mês.</p>
-      <p><b>Alta:</b> ${usd(mean(alta))} · <b>Baixa:</b> ${usd(mean(baixa))}</p>
-      <p><b>Diferença (alta − baixa): ${usd(obs, true)}</b> · IC 95% [${usd(icD[0], true)} ; ${usd(icD[1], true)}] · p = <b>${nf(pval, 3)}</b> (teste de permutação, ${nf(P)} sorteios) — ${sig ? "diferença distinguível de zero" : "sem evidência suficiente de diferença"}.</p>
-      <p class="aviso">Meses vizinhos não são independentes e os regimes coincidem com outros eventos (pandemia, safras); o p tende a ser otimista. Leia como indício, não como prova.</p>`;
+    host.innerHTML = `
+      <p class="manchete">${manchete}</p>
+      ${linha(`${nomeInd} baixa (até ${info.fmt(med)})`, mB, baixa.length, "var(--imp)")}
+      ${linha(`${nomeInd} alta (acima de ${info.fmt(med)})`, mA, alta.length, "var(--exp)")}
+      <p class="selo ${consistente ? "ok" : "talvez"}">${consistente ? "✓ Diferença consistente: dificilmente é só acaso." : "? Pode ser coincidência: a diferença é pequena perto da variação normal dos meses."}</p>
+      <p class="nota">Meses são divididos ao meio: metade com ${nomeInd} mais baixa, metade com mais alta. Isso mostra que andam juntos, não que um causa o outro (pandemia, safras e preços também mudaram nesses anos).</p>`;
   }
 
   /* ---------- 3) Compra x saída ---------- */
@@ -234,7 +204,7 @@
     const rows = mensal(new Set([st.prod]));
     const f = (r) => (st.fluxo === "exp" ? (st.medida === "valor" ? r.exp : r.expKg) : st.medida === "valor" ? r.imp : r.impKg);
     let vals = rows.map(f);
-    if (st.tend) { // razão à média móvel centrada de ~12 meses: tira a tendência de longo prazo (crescimento, preço)
+    if (st.tend) { // razão à média móvel centrada de ~12 meses
       const orig = vals.slice();
       vals = orig.map((v, i) => {
         const jan = orig.slice(Math.max(0, i - 6), Math.min(orig.length, i + 7));
@@ -243,7 +213,7 @@
         return mm > 0 ? v / mm : null;
       });
     }
-    if (st.dessaz) { // valor / média do mesmo mês-do-ano: remove a safra/sazonalidade
+    if (st.dessaz) { // valor / média do mesmo mês do ano
       const soma = Array(12).fill(0), cnt = Array(12).fill(0);
       rows.forEach((r, i) => { if (vals[i] == null) return; const mm = +r.k.slice(5) - 1; soma[mm] += vals[i]; cnt[mm]++; });
       vals = rows.map((r, i) => { const mm = +r.k.slice(5) - 1; const mu = cnt[mm] ? soma[mm] / cnt[mm] : 0; return vals[i] != null && mu > 0 ? vals[i] / mu : null; });
@@ -254,7 +224,8 @@
 
   function renderAntecedencia() {
     const serie = serieAntecedencia();
-    const nomeInd = IND[estado.ind].curto, nomeProd = D.commodities[st.prod].nome;
+    const info = IND[estado.ind], nomeInd = info.curto, nomeProd = D.commodities[st.prod].nome.replace(/ \(.*\)/, "");
+    const fl = st.fluxo === "exp" ? "exportação" : "importação";
     const rs = [];
     for (let L = 0; L <= MAX_LAG; L++) {
       const pares = serie.filter((p) => p.v != null && indEm(p.k, L) != null);
@@ -262,124 +233,75 @@
     }
     const validos = rs.filter((o) => o.r != null);
     const melhor = validos.length ? validos.reduce((a, b) => (Math.abs(b.r) > Math.abs(a.r) ? b : a)) : null;
-    const lag = Math.min(MAX_LAG, st.lag ?? (melhor ? melhor.L : 0));
-    $("#a-lag").value = lag; $("#a-lag-val").textContent = lag === 0 ? "0 mês (época da saída)" : `${lag} ${lag === 1 ? "mês" : "meses"} antes`;
-    const medidaTxt = st.medida === "valor" ? "valor" : "volume";
-    $("#a-linha-tit").textContent = `${nomeProd} (${st.fluxo === "exp" ? "exportação" : "importação"}, ${medidaTxt}${st.tend ? ", sem tendência" : ""}${st.dessaz ? ", sem sazonalidade" : ""}) × ${nomeInd} de ${lag} ${lag === 1 ? "mês" : "meses"} antes — em desvios-padrão`;
 
-    /* barras de r por defasagem */
+    /* gráfico */
     const hb = $("#a-barras"); hb.innerHTML = "";
-    const W = Math.max(300, hb.clientWidth || 480), H = 260, m = { l: 34, r: 8, t: 14, b: 44 };
+    const W = Math.max(280, hb.clientWidth || 600), pq = W < 520, H = pq ? 230 : 250, m = { l: 8, r: 8, t: 22, b: 50 };
     const iw = W - m.l - m.r, ih = H - m.t - m.b, bw = iw / (MAX_LAG + 1);
-    const rmax = Math.max(0.3, Math.ceil(Math.max(...validos.map((o) => Math.abs(o.r)), 0.3) * 10) / 10);
+    const rmax = Math.max(0.3, Math.ceil(Math.max(...validos.map((o) => Math.abs(o.r)), 0.1) * 10) / 10);
     const y = (v) => m.t + ih / 2 - (v / rmax) * (ih / 2);
-    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Correlação por defasagem em meses" });
-    [-rmax, -rmax / 2, 0, rmax / 2, rmax].forEach((v) => {
-      svg.append(sv("line", { class: v === 0 ? "zero" : "grade", x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
-      const t = sv("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }); t.textContent = nf(v, 2); svg.append(t);
-    });
+    const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Relação entre ${nomeProd} e ${nomeInd} de meses anteriores` });
+    svg.append(sv("line", { class: "zero", x1: m.l, x2: W - m.r, y1: y(0), y2: y(0) }));
+    const topo = sv("text", { x: m.l, y: 11 }); topo.textContent = "↑ sobem juntos"; svg.append(topo);
+    const base = sv("text", { x: m.l, y: m.t + ih + 12 }); base.textContent = "↓ um sobe, o outro cai"; svg.append(base);
+    const destaque = melhor && Math.abs(melhor.r) >= 0.15 ? (melhor.L === 0 || Math.abs(melhor.r) - Math.abs(rs[0].r ?? 0) < 0.08 ? 0 : melhor.L) : -1;
     rs.forEach((o) => {
       const cx = m.l + bw * (o.L + 0.5);
       if (o.r != null) {
-        const sel = o.L === lag, best = melhor && o.L === melhor.L;
-        const r = sv("rect", { x: cx - bw * 0.36, y: Math.min(y(0), y(o.r)), width: bw * 0.72, height: Math.max(1.5, Math.abs(y(o.r) - y(0))), rx: 3,
-          fill: o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: sel ? 1 : 0.5, stroke: sel ? "#fff" : best ? "var(--ind)" : "none", "stroke-width": 2, style: "cursor:pointer" });
-        const tt = sv("title"); tt.textContent = `defasagem ${o.L}: r = ${nf(o.r, 2)} (${o.n} meses)`; r.append(tt);
-        r.addEventListener("click", () => { st.lag = o.L; renderAntecedencia(); });
-        svg.append(r);
+        const fraca = Math.abs(o.r) < 0.15, best = o.L === destaque && !fraca;
+        const r = sv("rect", { x: cx - bw * 0.34, y: Math.min(y(0), y(o.r)), width: bw * 0.68, height: Math.max(2, Math.abs(y(o.r) - y(0))), rx: 3,
+          fill: fraca ? "#ffffff" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
+        const tt = sv("title"); tt.textContent = `${o.L === 0 ? "No mês da saída" : "Indicador de " + meses(o.L) + " antes"}: relação ${forca(o.r)}${fraca ? "" : o.r > 0 ? " (sobem juntos)" : " (um sobe, o outro cai)"}`;
+        r.append(tt); svg.append(r);
       }
-      const t = sv("text", { x: cx, y: H - 26, "text-anchor": "middle" }); t.textContent = o.L; svg.append(t);
+      const t = sv("text", { x: cx, y: H - 24, "text-anchor": "middle" }); t.textContent = o.L; svg.append(t);
     });
-    const ex = sv("text", { x: m.l, y: H - 6 }); ex.textContent = "← saída"; svg.append(ex);
-    const ec = sv("text", { x: W - m.r, y: H - 6, "text-anchor": "end" }); ec.textContent = "meses antes (compra) →"; svg.append(ec);
+    const e1 = sv("text", { x: m.l, y: H - 5 }); e1.textContent = "← mês da saída"; svg.append(e1);
+    const e2 = sv("text", { x: W - m.r, y: H - 5, "text-anchor": "end" }); e2.textContent = "meses antes (compra) →"; svg.append(e2);
     hb.append(svg);
+    $("#a-leg").innerHTML = `
+      <span><i class="barra" style="--c:var(--exp)"></i>sobem juntos</span>
+      <span><i class="barra" style="--c:var(--neg)"></i>um sobe, o outro cai</span>
+      <span><i class="barra" style="--c:#fff;opacity:.25"></i>quase nenhuma relação</span>
+      <span><i class="barra" style="--c:transparent;outline:2px solid var(--ind)"></i>época com a relação mais clara</span>`;
 
-    const hl = $("#a-linha"); hl.innerHTML = "";
-    const pts = serie.map((p) => ({ k: p.k, a: p.v, b: indEm(p.k, lag) }));
-    const za = zscore(pts.map((p) => p.a)), zb = zscore(pts.map((p) => p.b));
-    const W2 = Math.max(300, hl.clientWidth || 480), m2 = { l: 30, r: 8, t: 14, b: 30 };
-    const iw2 = W2 - m2.l - m2.r, ih2 = H - m2.t - m2.b, n = pts.length, step = iw2 / n;
-    const zs = [...za, ...zb].filter((v) => v != null);
-    const zlim = Math.max(2, Math.ceil(Math.max(...zs.map(Math.abs), 2)));
-    const y2 = (v) => m2.t + ih2 / 2 - (v / zlim) * (ih2 / 2), x2 = (i) => m2.l + step * (i + 0.5);
-    const s2 = sv("svg", { viewBox: `0 0 ${W2} ${H}`, role: "img", "aria-label": "Série da commodity e do indicador defasado, padronizadas" });
-    for (let v = -zlim; v <= zlim; v += zlim / 2) {
-      s2.append(sv("line", { class: v === 0 ? "zero" : "grade", x1: m2.l, x2: W2 - m2.r, y1: y2(v), y2: y2(v) }));
-      const t = sv("text", { x: m2.l - 6, y: y2(v) + 4, "text-anchor": "end" }); t.textContent = nf(v, 0 + (zlim % 2 ? 1 : 0)); s2.append(t);
+    /* frase principal */
+    let manchete, nota = "";
+    if (!melhor) manchete = `Poucos meses com dado para calcular. Amplie o período ou troque o indicador.`;
+    else if (Math.abs(melhor.r) < 0.15) {
+      manchete = `Nenhuma época mostra relação clara: ${nomeProd} (${fl}) não parece seguir o cenário de ${nomeInd}, nem o da compra nem o da saída.`;
+    } else {
+      const r0 = rs[0].r, quando = melhor.L === 0 || Math.abs(melhor.r) - Math.abs(r0 ?? 0) < 0.08;
+      const sentido = melhor.r > 0
+        ? `quando ${nomeInd} está ${estado.ind === "selic" ? "mais alta" : "mais alto"}, ${nomeProd} tende a ${st.fluxo === "exp" ? "embarcar" : "entrar"} ${st.medida === "valor" ? "mais valor" : "mais volume"}`
+        : `quando ${nomeInd} está ${estado.ind === "selic" ? "mais alta" : "mais alto"}, ${nomeProd} tende a ${st.fluxo === "exp" ? "embarcar" : "entrar"} ${st.medida === "valor" ? "menos valor" : "menos volume"}`;
+      manchete = quando
+        ? `${nomeProd} (${fl}) acompanha mais o cenário da <b>época da saída</b> (relação ${forca(melhor.r)}).`
+        : `${nomeProd} (${fl}) acompanha mais o cenário de <b>${meses(melhor.L)} antes</b>, a época da compra (relação ${forca(melhor.r)}).`;
+      nota = `Na prática: ${sentido}. `;
     }
-    const cada = Math.ceil(n / (peqW(W2) ? 4 : 8));
-    pts.forEach((p, i) => { if (i % cada) return; const t = sv("text", { x: x2(i), y: H - 10, "text-anchor": "middle" }); t.textContent = mesRot(p.k); s2.append(t); });
-    const traco = (zv, cor, extra = {}) => {
-      let d = "", ab = false;
-      zv.forEach((v, i) => { if (v == null) { ab = false; return; } d += `${ab ? "L" : "M"}${x2(i).toFixed(1)} ${y2(v).toFixed(1)}`; ab = true; });
-      s2.append(sv("path", { d, class: "linha", stroke: cor, ...extra }));
-    };
-    traco(zb, "var(--ind)", { "stroke-dasharray": "6 5", "stroke-width": 2 });
-    traco(za, CORES[st.prod]);
-    const guia = sv("line", { class: "guia", y1: m2.t, y2: m2.t + ih2, opacity: 0 });
-    const alvo = sv("rect", { x: m2.l, y: m2.t, width: iw2, height: ih2, fill: "transparent", style: "cursor:crosshair" });
-    s2.append(guia, alvo);
-    const dica = document.getElementById("dica");
-    const mostra = (ev) => {
-      const pt = ev.touches ? ev.touches[0] : ev, box = s2.getBoundingClientRect();
-      const px = ((pt.clientX - box.left) / box.width) * W2;
-      const i = Math.max(0, Math.min(n - 1, Math.floor((px - m2.l) / step))), p = pts[i];
-      guia.setAttribute("x1", x2(i)); guia.setAttribute("x2", x2(i)); guia.setAttribute("opacity", 1);
-      dica.hidden = false;
-      dica.innerHTML = `<b>${mesRot(p.k)}</b>
-        <div><span style="color:${CORES[st.prod]}">${nomeProd}</span><span>${za[i] == null ? "—" : nf(za[i], 2) + " σ"}</span></div>
-        <div><span style="color:var(--ind)">${nomeInd} (${shift(p.k, -lag).slice(5)}/${shift(p.k, -lag).slice(2, 4)})</span><span>${p.b == null ? "sem dado" : IND[estado.ind].fmt(p.b)}</span></div>`;
-      dica.style.left = `${pt.clientX + 16 + 200 > innerWidth ? pt.clientX - 216 : pt.clientX + 16}px`; dica.style.top = `${Math.max(8, pt.clientY - 20)}px`;
-    };
-    const some = () => { dica.hidden = true; guia.setAttribute("opacity", 0); };
-    alvo.addEventListener("mousemove", mostra); alvo.addEventListener("touchmove", mostra, { passive: true });
-    alvo.addEventListener("mouseleave", some); alvo.addEventListener("touchend", some);
-    hl.append(s2);
-
-    /* leitura */
-    const r0 = rs[0].r, rl = rs.find((o) => o.L === lag);
-    let leitura;
-    if (!melhor) leitura = `Sem pares suficientes (mínimo 12 meses) para calcular — amplie o período ou escolha outro indicador.`;
-    else {
-      const ganho = Math.abs(melhor.r) - Math.abs(r0 ?? 0);
-      const fraca = Math.abs(melhor.r) < 0.2;
-      const ondeSegue = fraca
-        ? `<b>nenhuma defasagem mostra associação relevante</b> (|r| < 0,20): neste recorte, ${nomeProd} não segue claramente o cenário de ${nomeInd} nem da época da compra nem da saída.`
-        : melhor.L === 0 || ganho < 0.08
-        ? `a associação mais forte está na <b>época da saída</b> (defasagem 0): ${nomeProd} acompanha o cenário do mês do embarque.`
-        : `a associação é mais forte com o cenário de <b>${melhor.L} ${melhor.L === 1 ? "mês" : "meses"} antes</b> (época da compra/contratação), não com o do mês da saída (r = ${nf(r0 ?? 0, 2)}).`;
-      leitura = `<p>Maior associação absoluta: defasagem <b>${melhor.L}</b> (r = <b>${nf(melhor.r, 2)}</b>, ${melhor.n} meses). Neste recorte, ${ondeSegue}</p>
-        <p>Defasagem selecionada (${lag}): r = <b>${rl && rl.r != null ? nf(rl.r, 2) : "—"}</b>${rl ? ` com ${rl.n} meses` : ""}. Sinal positivo: ${nomeInd} mais ${estado.ind === "selic" ? "alta" : "alto"} naquela época ↔ ${st.medida === "valor" ? "valor" : "volume"} maior no embarque.</p>`;
-    }
-    $("#a-txt").innerHTML = `${leitura}
-      <p class="aviso">Correlação entre séries temporais, com poucos meses, sofre de tendência e autocorrelação, e o indicador (${nomeInd}) muda por regimes (poucos movimentos independentes). Use para levantar hipóteses; o teste de causalidade pediria modelos próprios (ex.: VAR, Granger).${st.dessaz ? "" : " Sem remover a sazonalidade, a safra (pico de embarques de soja entre mar. e jun.) domina o resultado."}${st.tend ? "" : " Sem remover a tendência, o crescimento de 2018 a 2025 infla a correlação com qualquer série que também suba ou desça de forma gradual."}</p>`;
-  }
-  function zscore(arr) {
-    const v = arr.filter((x) => x != null);
-    if (v.length < 2) return arr.map(() => null);
-    const m = mean(v), s = sd(v) || 1;
-    return arr.map((x) => (x == null ? null : (x - m) / s));
+    $("#a-manchete").innerHTML = manchete;
+    $("#a-txt").textContent = `${nota}Andar junto não prova que um causa o outro.${melhor && melhor.n ? ` Base: ${melhor.n} meses.` : ""}`;
   }
 
+  /* ---------- Controles ---------- */
   function radio(sel, obj, chave, fn) {
     const g = $(sel), marca = () => g.querySelectorAll("button").forEach((b) => b.setAttribute("aria-checked", b.dataset.v === obj[chave]));
-    g.querySelectorAll("button").forEach((b) => (b.onclick = () => { obj[chave] = b.dataset.v; if (chave !== "lag") marca(); fn(); }));
+    g.querySelectorAll("button").forEach((b) => (b.onclick = () => { obj[chave] = b.dataset.v; marca(); fn(); }));
     marca();
   }
   radio("#s-metrica", st, "metrica", () => { renderAmostragem(); renderRegimes(); });
-  radio("#a-fluxo", st, "fluxo", () => { st.lag = null; renderAntecedencia(); });
-  radio("#a-medida", st, "medida", () => { st.lag = null; renderAntecedencia(); });
+  radio("#a-fluxo", st, "fluxo", renderAntecedencia);
+  radio("#a-medida", st, "medida", renderAntecedencia);
   $("#n-in").oninput = (e) => { st.n = +e.target.value; renderAmostragem(); };
   $("#sorteia").onclick = () => { st.seed++; renderAmostragem(); };
   PRODUTOS.forEach((p) => $("#a-prod").append(el("option", { value: p }, D.commodities[p].nome)));
   $("#a-prod").value = st.prod;
-  $("#a-prod").onchange = (e) => { st.prod = e.target.value; st.lag = null; renderAntecedencia(); };
+  $("#a-prod").onchange = (e) => { st.prod = e.target.value; renderAntecedencia(); };
   $("#a-dessaz").checked = st.dessaz;
   $("#a-tend").checked = st.tend;
-  $("#a-tend").onchange = (e) => { st.tend = e.target.checked; st.lag = null; renderAntecedencia(); };
-  $("#a-dessaz").onchange = (e) => { st.dessaz = e.target.checked; st.lag = null; renderAntecedencia(); };
-  $("#a-lag").oninput = (e) => { st.lag = +e.target.value; renderAntecedencia(); };
-  $("#a-auto").onclick = () => { st.lag = null; renderAntecedencia(); };
+  $("#a-tend").onchange = (e) => { st.tend = e.target.checked; renderAntecedencia(); };
+  $("#a-dessaz").onchange = (e) => { st.dessaz = e.target.checked; renderAntecedencia(); };
 
   const tudo = () => { renderAmostragem(); renderRegimes(); renderAntecedencia(); };
   window.DASH.onRender.push(tudo);
