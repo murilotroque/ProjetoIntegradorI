@@ -45,7 +45,11 @@
   const curto = (v) => usd(v).replace("US$ ", "");
   const shift = (k, d) => { const [a, m] = k.split("-").map(Number); const i = a * 12 + (m - 1) + d; return `${Math.floor(i / 12)}-${String((i % 12) + 1).padStart(2, "0")}`; };
   const meses = (n) => `${n} ${n === 1 ? "mês" : "meses"}`;
-  const forca = (r) => { const a = Math.abs(r); return a < 0.15 ? "quase nenhuma" : a < 0.3 ? "fraca" : a < 0.5 ? "média" : "forte"; };
+  const LIMITE = 0.3; // abaixo disso a relação explica menos de 9% das oscilações: tratamos como "sem relação clara"
+  const forca = (r) => { const a = Math.abs(r); return a < LIMITE ? "sem relação clara" : a < 0.5 ? "fraca" : a < 0.7 ? "média" : "forte"; };
+  const pctVar = (r) => `${nf(r * r * 100, 0)}%`;
+  // desvio em relação ao "normal da época" (média dos 13 meses em volta): tira o crescimento ao longo dos anos
+  const desvioMM = (v) => v.map((x, i) => { const j = v.slice(Math.max(0, i - 6), Math.min(v.length, i + 7)); return j.length < 7 ? null : x - mean(j); });
 
   /* ---------- Esqueleto ---------- */
   raiz.innerHTML = `
@@ -160,43 +164,50 @@
 
   /* ---------- 2) Indicador alto x baixo ---------- */
   function renderRegimes() {
-    const rows = mensal().filter((r) => r.ind != null);
     const info = IND[estado.ind], nomeInd = info.curto;
     $("#s2-tit").textContent = `${nomeInd} alta × baixa: muda alguma coisa?`;
     const host = $("#s2");
-    const ordenado = sorted(rows.map((r) => r.ind)), med = quant(ordenado, 0.5);
-    const baixa = rows.filter((r) => r.ind <= med).map((r) => r[st.metrica]);
-    const alta = rows.filter((r) => r.ind > med).map((r) => r[st.metrica]);
+    const base = mensal(), dev = desvioMM(base.map((r) => r[st.metrica]));
+    const rows = base.map((r, i) => ({ ind: r.ind, d: dev[i] })).filter((r) => r.ind != null && r.d != null);
+    const med = quant(sorted(rows.map((r) => r.ind)), 0.5);
+    const lab = rows.map((r) => r.ind > med);
+    const alta = rows.filter((_, i) => lab[i]).map((r) => r.d), baixa = rows.filter((_, i) => !lab[i]).map((r) => r.d);
     if (baixa.length < 6 || alta.length < 6) { host.innerHTML = `<p class="nota">Poucos meses com dado de ${nomeInd} neste período para comparar. Amplie o período.</p>`; return; }
 
-    const rnd = rng(2024), P = 5000, todos = baixa.concat(alta), nA = alta.length;
-    const obs = mean(alta) - mean(baixa);
+    // Teste que respeita a ordem no tempo: gira os rótulos "alta/baixa" pela linha do tempo (todas as posições)
+    // e vê quantas vezes uma divisão "por acaso" dá diferença tão grande quanto a real.
+    const N = rows.length, difDe = (rot) => {
+      let sa = 0, na = 0, sb = 0, nb = 0;
+      for (let i = 0; i < N; i++) { if (lab[(i + rot) % N]) { sa += rows[i].d; na++; } else { sb += rows[i].d; nb++; } }
+      return sa / na - sb / nb;
+    };
+    const obs = difDe(0);
     let extremos = 0;
-    for (let p = 0; p < P; p++) {
-      for (let i = todos.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [todos[i], todos[j]] = [todos[j], todos[i]]; }
-      if (Math.abs(mean(todos.slice(0, nA)) - mean(todos.slice(nA))) >= Math.abs(obs)) extremos++;
-    }
-    const consistente = (extremos + 1) / (P + 1) < 0.05;
+    for (let rot = 0; rot < N; rot++) if (Math.abs(difDe(rot)) >= Math.abs(obs) - 1e-9) extremos++;
+    const consistente = extremos / N < 0.05;
 
     const mA = mean(alta), mB = mean(baixa), max = Math.max(Math.abs(mA), Math.abs(mB)) || 1;
-    const linha = (rot, v, qtd, cor) => `
-      <div class="gb">
-        <div class="gb-topo"><span>${rot}</span><b>${usd(v)}</b></div>
-        <div class="gb-trilho"><div class="gb-barra" style="width:${(Math.abs(v) / max) * 100}%;background:${v < 0 ? "var(--neg)" : cor}"></div></div>
-        <small>média mensal de ${qtd} meses</small>
+    const sinal = (v) => `${v >= 0 ? "+" : "−"}${usd(Math.abs(v))}`;
+    const linha = (rot, v, qtd, cor) => {
+      const w = (Math.abs(v) / max) * 50;
+      return `<div class="gb">
+        <div class="gb-topo"><span>${rot}</span><b>${sinal(v)}</b></div>
+        <div class="gb-trilho"><div class="gb-meio"></div><div class="gb-barra" style="width:${w}%;left:${v >= 0 ? 50 : 50 - w}%;background:${v < 0 ? "var(--neg)" : cor}"></div></div>
+        <small>média de ${qtd} meses · ${v >= 0 ? "acima" : "abaixo"} do normal da época</small>
       </div>`;
-    let manchete;
-    if (mB > 0 && mA > 0 && st.metrica !== "saldo") {
-      const p = ((mA - mB) / mB) * 100;
-      manchete = `Nos meses de ${nomeInd} alta, ${NOME_METRICA[st.metrica]} foram <b>${nf(Math.abs(p), 0)}% ${p >= 0 ? "maiores" : "menores"}</b>.`;
-    } else manchete = `Nos meses de ${nomeInd} alta, ${NOME_METRICA[st.metrica]} ficaram <b>${usd(Math.abs(obs))} ${obs >= 0 ? "acima" : "abaixo"}</b> da média dos meses de ${nomeInd} baixa.`;
+    };
+    const normal = mean(base.map((r) => r[st.metrica]));
+    const pct = st.metrica !== "saldo" && normal > 0 ? ` (cerca de ${nf((Math.abs(obs) / normal) * 100, 0)}%)` : "";
+    const manchete = consistente
+      ? `Nos meses de ${nomeInd} alta, ${NOME_METRICA[st.metrica]} ficaram <b>${usd(Math.abs(obs))}${pct} ${obs >= 0 ? "acima" : "abaixo"}</b> dos meses de ${nomeInd} baixa, já descontando o crescimento ao longo dos anos.`
+      : `Descontando o crescimento ao longo dos anos, <b>não dá para afirmar</b> que ${NOME_METRICA[st.metrica]} mudam quando a ${nomeInd} fica alta ou baixa.`;
 
     host.innerHTML = `
       <p class="manchete">${manchete}</p>
       ${linha(`${nomeInd} baixa (até ${info.fmt(med)})`, mB, baixa.length, "var(--imp)")}
       ${linha(`${nomeInd} alta (acima de ${info.fmt(med)})`, mA, alta.length, "var(--exp)")}
-      <p class="selo ${consistente ? "ok" : "talvez"}">${consistente ? "✓ Diferença consistente: dificilmente é só acaso." : "? Pode ser coincidência: a diferença é pequena perto da variação normal dos meses."}</p>
-      <p class="nota">Meses são divididos ao meio: metade com ${nomeInd} mais baixa, metade com mais alta. Isso mostra que andam juntos, não que um causa o outro (pandemia, safras e preços também mudaram nesses anos).</p>`;
+      <p class="selo ${consistente ? "ok" : "talvez"}">${consistente ? "✓ A diferença é maior do que a variação normal entre períodos." : "? A diferença é pequena perto da variação normal entre períodos: pode ser coincidência."}</p>
+      <p class="nota">"Normal da época" = média dos 13 meses em volta de cada mês; assim o crescimento de longo prazo não infla a comparação. Mesmo assim, isso mostra que andam juntos, não que um causa o outro.</p>`;
   }
 
   /* ---------- 3) Compra x saída ---------- */
@@ -238,20 +249,22 @@
     const hb = $("#a-barras"); hb.innerHTML = "";
     const W = Math.max(280, hb.clientWidth || 600), pq = W < 520, H = pq ? 230 : 250, m = { l: 8, r: 8, t: 22, b: 50 };
     const iw = W - m.l - m.r, ih = H - m.t - m.b, bw = iw / (MAX_LAG + 1);
-    const rmax = Math.max(0.3, Math.ceil(Math.max(...validos.map((o) => Math.abs(o.r)), 0.1) * 10) / 10);
+    const rmax = Math.max(0.5, Math.ceil(Math.max(...validos.map((o) => Math.abs(o.r)), 0.1) * 10) / 10);
     const y = (v) => m.t + ih / 2 - (v / rmax) * (ih / 2);
     const svg = sv("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `Relação entre ${nomeProd} e ${nomeInd} de meses anteriores` });
     svg.append(sv("line", { class: "zero", x1: m.l, x2: W - m.r, y1: y(0), y2: y(0) }));
     const topo = sv("text", { x: m.l, y: 11 }); topo.textContent = "↑ sobem juntos"; svg.append(topo);
     const base = sv("text", { x: m.l, y: m.t + ih + 12 }); base.textContent = "↓ um sobe, o outro cai"; svg.append(base);
-    const destaque = melhor && Math.abs(melhor.r) >= 0.15 ? (melhor.L === 0 || Math.abs(melhor.r) - Math.abs(rs[0].r ?? 0) < 0.08 ? 0 : melhor.L) : -1;
+    const destaque = melhor && Math.abs(melhor.r) >= LIMITE ? (melhor.L === 0 || Math.abs(melhor.r) - Math.abs(rs[0].r ?? 0) < 0.08 ? 0 : melhor.L) : -1;
+    [LIMITE, -LIMITE].forEach((v) => svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: "var(--ind)", "stroke-dasharray": "3 5", opacity: 0.45 })));
+    const lt = sv("text", { x: W - m.r, y: y(LIMITE) - 4, "text-anchor": "end" }); lt.style.fill = "var(--ind)"; lt.textContent = "só conta quando passa daqui"; svg.append(lt);
     rs.forEach((o) => {
       const cx = m.l + bw * (o.L + 0.5);
       if (o.r != null) {
-        const fraca = Math.abs(o.r) < 0.15, best = o.L === destaque && !fraca;
+        const fraca = Math.abs(o.r) < LIMITE, best = o.L === destaque && !fraca;
         const r = sv("rect", { x: cx - bw * 0.34, y: Math.min(y(0), y(o.r)), width: bw * 0.68, height: Math.max(2, Math.abs(y(o.r) - y(0))), rx: 3,
           fill: fraca ? "#ffffff" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
-        const tt = sv("title"); tt.textContent = `${o.L === 0 ? "No mês da saída" : "Indicador de " + meses(o.L) + " antes"}: relação ${forca(o.r)}${fraca ? "" : o.r > 0 ? " (sobem juntos)" : " (um sobe, o outro cai)"}`;
+        const tt = sv("title"); tt.textContent = `${o.L === 0 ? "No mês da saída" : "Indicador de " + meses(o.L) + " antes"}: ${fraca ? "sem relação clara" : "relação " + forca(o.r)}${fraca ? "" : o.r > 0 ? " (sobem juntos)" : " (um sobe, o outro cai)"}`;
         r.append(tt); svg.append(r);
       }
       const t = sv("text", { x: cx, y: H - 24, "text-anchor": "middle" }); t.textContent = o.L; svg.append(t);
@@ -262,14 +275,14 @@
     $("#a-leg").innerHTML = `
       <span><i class="barra" style="--c:var(--exp)"></i>sobem juntos</span>
       <span><i class="barra" style="--c:var(--neg)"></i>um sobe, o outro cai</span>
-      <span><i class="barra" style="--c:#fff;opacity:.25"></i>quase nenhuma relação</span>
+      <span><i class="barra" style="--c:#fff;opacity:.25"></i>sem relação clara</span>
       <span><i class="barra" style="--c:transparent;outline:2px solid var(--ind)"></i>época com a relação mais clara</span>`;
 
     /* frase principal */
     let manchete, nota = "";
     if (!melhor) manchete = `Poucos meses com dado para calcular. Amplie o período ou troque o indicador.`;
-    else if (Math.abs(melhor.r) < 0.15) {
-      manchete = `Nenhuma época mostra relação clara: ${nomeProd} (${fl}) não parece seguir o cenário de ${nomeInd}, nem o da compra nem o da saída.`;
+    else if (Math.abs(melhor.r) < LIMITE) {
+      manchete = `Nenhuma época mostra relação clara: ${nomeProd} (${fl}) não parece seguir o cenário de ${nomeInd}, nem o da compra nem o da saída (a relação mais forte explica só ${pctVar(melhor.r)} das oscilações).`;
     } else {
       const r0 = rs[0].r, quando = melhor.L === 0 || Math.abs(melhor.r) - Math.abs(r0 ?? 0) < 0.08;
       const sentido = melhor.r > 0

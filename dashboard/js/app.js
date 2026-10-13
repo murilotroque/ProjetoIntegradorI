@@ -360,28 +360,44 @@
     for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
     return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
   }
+  const LIMITE = 0.3; // abaixo disso a relação explica menos de 9% das oscilações
+  const forca = (r) => { const a = Math.abs(r); return a < LIMITE ? "sem relação clara" : a < 0.5 ? "fraca" : a < 0.7 ? "média" : "forte"; };
   const leitura = (r) => {
-    if (r == null) return "dados insuficientes para dizer";
-    const a = Math.abs(r);
-    if (a < 0.15) return "quase nenhuma relação";
-    const f = a < 0.3 ? "fraca" : a < 0.5 ? "média" : "forte";
-    return `relação ${f}: ${r > 0 ? "tendem a subir juntos" : "quando um sobe, o outro tende a cair"}`;
+    if (r == null) return "poucos períodos para dizer (use a visão mensal ou trimestral)";
+    if (Math.abs(r) < LIMITE) return "sem relação clara";
+    return `relação ${forca(r)}: ${r > 0 ? "tendem a subir juntos" : "quando um sobe, o outro tende a cair"}`;
+  };
+  // desvio relativo ao "normal da época" (média dos períodos em volta): tira o crescimento ao longo dos anos
+  const METADE = { mes: 6, tri: 2, ano: 1 };
+  const semTendencia = (vals, gran) => {
+    const h = METADE[gran];
+    return vals.map((v, i) => {
+      const j = vals.slice(Math.max(0, i - h), Math.min(vals.length, i + h + 1));
+      if (j.length < 2 * h + 1) return null;
+      const m = j.reduce((a, b) => a + b, 0) / j.length;
+      return m > 0 ? v / m : null;
+    });
   };
 
   function renderCorrel(rows) {
-    const validos = rows.filter((r) => r.ind != null);
     const box = $("#correl");
+    const nome = IND[estado.ind].curto;
     const par = (titulo, campo) => {
-      const r = pearson(validos.map((v) => v.ind), validos.map((v) => v[campo]));
+      const bruto = rows.filter((r) => r.ind != null);
+      const rBruto = pearson(bruto.map((v) => v.ind), bruto.map((v) => v[campo]));
+      const dev = semTendencia(rows.map((r) => r[campo]), estado.gran);
+      const ok = rows.map((r, i) => ({ x: r.ind, y: dev[i] })).filter((p) => p.x != null && p.y != null);
+      const r = ok.length >= 8 ? pearson(ok.map((p) => p.x), ok.map((p) => p.y)) : null;
+      const inflado = r != null && rBruto != null && Math.abs(rBruto) >= LIMITE && Math.abs(r) < LIMITE;
       return `<div class="cr"><span class="tit">${titulo}</span>
         <div class="escala"><div class="pino" style="left:calc(${r == null ? 50 : ((r + 1) / 2) * 100}% - 2px)"></div></div>
         <div class="eixo"><span>um sobe, o outro cai</span><span>sobem juntos</span></div>
-        <span class="leitura"><b>${leitura(r)}</b></span></div>`;
+        <span class="leitura"><b>${leitura(r)}</b>${inflado ? `<br>Sem descontar o crescimento ao longo dos anos pareceria ${forca(rBruto)}, mas é só porque os dois subiram ao mesmo tempo.` : ""}</span></div>`;
     };
     box.innerHTML = `
-      ${par(`${IND[estado.ind].curto} e exportações`, "exp")}
-      ${par(`${IND[estado.ind].curto} e importações`, "imp")}
-      <p class="aviso">Andar junto não prova que uma coisa causa a outra: pandemia, safras e preços também mexeram nesses anos.</p>`;
+      ${par(`${nome} e exportações`, "exp")}
+      ${par(`${nome} e importações`, "imp")}
+      <p class="aviso">A leitura desconta o crescimento de longo prazo (cada período é comparado com o "normal" dos vizinhos). Andar junto não prova que uma coisa causa a outra.</p>`;
   }
 
   /* ---------- Render geral ---------- */
