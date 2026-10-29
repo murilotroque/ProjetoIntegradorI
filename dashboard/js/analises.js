@@ -139,18 +139,18 @@
     rows.forEach((r, i) => {
       const v = pop[i], top = Math.min(y(v), y(0)), alt = Math.max(1, Math.abs(y(v) - y(0)));
       const on = idx.has(i);
-      const b = sv("rect", { x: m.l + i * bw + bw * 0.1, y: top, width: Math.max(1, bw * 0.8), height: alt, rx: 1.5, fill: on ? "var(--exp)" : "#ffffff", opacity: on ? 1 : 0.13 });
+      const b = sv("rect", { x: m.l + i * bw + bw * 0.1, y: top, width: Math.max(1, bw * 0.8), height: alt, rx: 1.5, fill: on ? "var(--exp)" : "var(--neutro)", opacity: on ? 1 : 0.13 });
       const t = sv("title"); t.textContent = `${r.k.slice(5)}/${r.k.slice(0, 4)}: ${usd(v)}${on ? " (sorteado)" : ""}`; b.append(t);
       svg.append(b);
       if (r.k.endsWith("-01")) { const t2 = sv("text", { x: m.l + i * bw, y: H - 7 }); t2.textContent = r.k.slice(0, 4); svg.append(t2); }
     });
     svg.append(sv("line", { class: "zero", x1: m.l, x2: W - m.r, y1: y(0), y2: y(0) }));
-    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(mu), y2: y(mu), stroke: "#fff", "stroke-width": 1.6, "stroke-dasharray": "5 4" }));
+    svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(mu), y2: y(mu), stroke: "var(--neutro)", "stroke-width": 1.6, "stroke-dasharray": "5 4" }));
     svg.append(sv("line", { x1: m.l, x2: W - m.r, y1: y(xb), y2: y(xb), stroke: "var(--ind)", "stroke-width": 2.4 }));
     host.append(svg);
     $("#s1-leg").innerHTML = `
       <span><i class="barra" style="--c:var(--exp)"></i>mês sorteado</span>
-      <span><i class="trac" style="--c:#fff"></i>média de todos os meses</span>
+      <span><i class="trac" style="--c:var(--neutro)"></i>média de todos os meses</span>
       <span><i style="--c:var(--ind)"></i>média dos sorteados</span>`;
 
     const pct = Math.abs(mu) > 0 && mu > 0 ? ` (${nf((erro95 / mu) * 100, 0)}% da média)` : "";
@@ -263,7 +263,7 @@
       if (o.r != null) {
         const fraca = Math.abs(o.r) < LIMITE, best = o.L === destaque && !fraca;
         const r = sv("rect", { x: cx - bw * 0.34, y: Math.min(y(0), y(o.r)), width: bw * 0.68, height: Math.max(2, Math.abs(y(o.r) - y(0))), rx: 3,
-          fill: fraca ? "#ffffff" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
+          fill: fraca ? "var(--neutro)" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
         const tt = sv("title"); tt.textContent = `${o.L === 0 ? "No mês da saída" : "Indicador de " + meses(o.L) + " antes"}: ${fraca ? "sem relação clara" : "relação " + forca(o.r)}${fraca ? "" : o.r > 0 ? " (sobem juntos)" : " (um sobe, o outro cai)"}`;
         r.append(tt); svg.append(r);
       }
@@ -275,7 +275,7 @@
     $("#a-leg").innerHTML = `
       <span><i class="barra" style="--c:var(--exp)"></i>sobem juntos</span>
       <span><i class="barra" style="--c:var(--neg)"></i>um sobe, o outro cai</span>
-      <span><i class="barra" style="--c:#fff;opacity:.25"></i>sem relação clara</span>
+      <span><i class="barra" style="--c:var(--neutro);opacity:.25"></i>sem relação clara</span>
       <span><i class="barra" style="--c:transparent;outline:2px solid var(--ind)"></i>época com a relação mais clara</span>`;
 
     /* frase principal */

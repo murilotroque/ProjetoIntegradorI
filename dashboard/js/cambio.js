@@ -161,7 +161,7 @@
     $("#c-leg").innerHTML = `
       <span><i class="barra" style="--c:var(--exp)"></i>sobe junto com o dólar</span>
       <span><i class="barra" style="--c:var(--neg)"></i>cai quando o dólar sobe</span>
-      <span><i class="barra" style="--c:#fff;opacity:.25"></i>sem relação clara</span>
+      <span><i class="barra" style="--c:var(--neutro);opacity:.25"></i>sem relação clara</span>
       <span>cor apagada = pode ser coincidência</span>`;
   }
 
@@ -195,7 +195,7 @@
       if (o.r != null) {
         const fraca = Math.abs(o.r) < LIMITE, best = a.melhor && o.L === a.melhor.L && !fraca;
         const r = sv("rect", { x: cx - bw * 0.34, y: Math.min(y(0), y(o.r)), width: bw * 0.68, height: Math.max(2, Math.abs(y(o.r) - y(0))), rx: 3,
-          fill: fraca ? "#fff" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
+          fill: fraca ? "var(--neutro)" : o.r >= 0 ? "var(--exp)" : "var(--neg)", opacity: fraca ? 0.22 : best ? 1 : 0.6, stroke: best ? "var(--ind)" : "none", "stroke-width": 2.5 });
         const tt = sv("title"); tt.textContent = `${o.L === 0 ? "Mesmo mês" : "Dólar de " + meses(o.L) + " antes"}: ${fraca ? "sem relação clara" : "relação " + forca(o.r)}`;
         r.append(tt); svg.append(r);
       }

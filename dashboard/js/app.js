@@ -7,10 +7,10 @@
 
   /* ---------- Configuração (fácil de editar) ---------- */
   const CORES = {
-    minerio_de_ferro: "#8b7bff",
-    soja: "#38bdf8",
-    petroleo: "#f472b6",
-    maquinas: "#fcd34d",
+    minerio_de_ferro: "var(--c-minerio)",
+    soja: "var(--c-soja)",
+    petroleo: "var(--c-petroleo)",
+    maquinas: "var(--c-maquinas)",
   };
   const IND = {
     selic: { nome: "Selic (% a.a.)", curto: "Selic", fmt: (v) => `${nf(v, 2)}%` },
